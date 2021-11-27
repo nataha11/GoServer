@@ -16,7 +16,6 @@ type binanceresp struct {
     Code int64 `json:"code"`
 }
 
-//our database
 type wallet map[string]float64
 var  db = map[int64]wallet{}
 
@@ -43,7 +42,7 @@ func main() {
         msgArr := strings.Split(update.Message.Text, " ")
 
         switch msgArr[0] {
-        //incorrect currency?
+        
         case "ADD":
 
             if len(msgArr) != 3 {
@@ -54,6 +53,11 @@ func main() {
             summ, err := strconv.ParseFloat(msgArr[2], 64)
             if err != nil {
                 bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Covertation impossible"))
+                continue
+            }
+
+            if summ < 0 {
+                bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Enter positive value\nUse SUB to subtract"))
                 continue
             }
 
@@ -80,6 +84,11 @@ func main() {
                 continue
             }
 
+            if summ < 0 {
+                bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Enter positive value\nUse ADD to add"))
+                continue
+            }
+
             if _, ok := db[update.Message.Chat.ID]; !ok {
                 db[update.Message.Chat.ID] = wallet{}
             }
@@ -96,28 +105,49 @@ func main() {
             bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, msg))
 
         case "DEL":
-            //incorrect currency
-            delete(db[update.Message.Chat.ID], msgArr[1])
 
+            if len(msgArr) != 2 {
+                bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: DEL currency"))
+                continue
+            }
+
+            if _, ok := db[update.Message.Chat.ID][msgArr[1]]; !ok {
+                bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "No such currency in your wallet"))
+            }
+
+            delete(db[update.Message.Chat.ID], msgArr[1])
             bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Delete currency"))
 
         case "SHOW":
 
+            if len(msgArr) != 1 {
+                bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: SHOW"))
+                continue
+            }
+
             msg := "Balance:\n"
-            var usdSumm float64
+
+            var usdSumm float64 = 0
+
             for key, value := range db[update.Message.Chat.ID] {
                 coinPrice, err := getPrice(key)
+
                 if err != nil {
                     bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, err.Error()))
                 }
+
+                if value != 0 {
+
                 usdSumm += value * coinPrice
-                msg += fmt.Sprintf("%s: %.2f [%.2f]\n", key, value, value * coinPrice)
+                msg += fmt.Sprintf("%s: %.2f [USD %.2f]\n", key, value, value * coinPrice)
             }
-            msg += fmt.Sprintf("\nSum: %.2f\n", usdSumm)
+            }
+
+            msg += fmt.Sprintf("\nSum: USD %.2f\n", usdSumm)
             bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, msg))
 
         default:
-            bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Unknown command"))
+            bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Unknown command %s. Use:\nADD currency value\nSUB currency value\nDEL currency\nSHOW", msgArr[0])))
 
             continue
 
@@ -129,6 +159,7 @@ func main() {
 }
 
 func getPrice(coin string) (price float64, err error) {
+
     resp, err := http.Get(fmt.Sprintf("https://api.binance.com/api/v3/ticker/price?symbol=%sUSDT", coin))
     if err != nil {
         return
@@ -147,8 +178,6 @@ func getPrice(coin string) (price float64, err error) {
     }  
 
     price = jsonResp.Price
-
-
 
     return
 }
